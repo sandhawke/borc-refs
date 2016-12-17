@@ -9,6 +9,7 @@ const c = require('./constants')
 const Simple = require('./simple')
 const Tagged = require('./tagged')
 const url = require('url')
+const resolve = require('./resolve')
 
 /**
  * Transform binary cbor data into JavaScript objects.
@@ -27,6 +28,8 @@ class Decoder {
       // Ensure the size is a power of 2
       opts.size = utils.nextPowerOf2(opts.size)
     }
+
+    this.kept = opts.kept || []
 
     // Heap use to share the input with the parser
     this._heap = new ArrayBuffer(opts.size)
@@ -47,6 +50,22 @@ class Decoder {
       5: (v) => {
         // const v = new Uint8Array(val)
         return c.TWO.pow(v[0]).times(v[1])
+      },
+      28: (val) => {
+        // console.log('eval tag 28', val);
+        // we DONT have access to know what the index is!
+        //kept.push(val);
+        return val
+      },
+      29: (val) => {
+        // console.log('eval tag 29', val, this.kept[val]);
+        const r = this.kept[val]
+        if (!r) throw Error('tag 29 referring to a value that has not even BEGUN yet')
+        const v = r.ref && r.ref[1]
+        if (v) return v
+        this.needsResolution = true
+        // or push val.tag28index?
+        return new Tagged(29, val)
       },
       32: (val) => url.parse(val),
       35: (val) => new RegExp(val)
@@ -113,7 +132,8 @@ class Decoder {
     }
 
     switch (p.type) {
-      case c.PARENT.TAG:
+    case c.PARENT.TAG:
+        // console.log('closing tag', p)
         this._push(
           this.createTag(p.ref[0], p.ref[1])
         )
@@ -498,11 +518,17 @@ class Decoder {
   }
 
   pushTagStart (tag) {
-    this._parents[this._depth] = {
+    // console.log('starting tag', tag)
+    const obj = {
       type: c.PARENT.TAG,
       length: 1,
       ref: [tag]
     }
+    if (tag === 28) {
+      obj.tag28index = this.kept.length
+      this.kept.push(obj)
+    }
+    this._parents[this._depth] = obj
   }
 
   pushTagStart4 (f, g) {
@@ -567,6 +593,10 @@ class Decoder {
 
     if (this._res.length === 0) {
       throw new Error('No valid result')
+    }
+
+    if (this.needsResolution) {
+      resolve(this._res, this.kept)
     }
   }
 
