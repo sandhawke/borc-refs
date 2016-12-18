@@ -1,6 +1,7 @@
 'use strict'
 
-const debugr = require('debug')
+const debugM = require('debug')
+const debug = debugM('encoder')
 const url = require('url')
 const Bignumber = require('bignumber.js')
 
@@ -53,7 +54,7 @@ class Encoder {
     this._onCycle = options.onCycle
 
     this.depth = 0
-    this.maxDepth = options.maxDepth || 50
+    this.maxDepth = options.maxDepth || 20
 
     this.semanticTypes = [
       [url.Url, this._pushUrl],
@@ -367,7 +368,7 @@ class Encoder {
     }).sort(utils.keySorter)
 
     for (var j = 0; j < len; j++) {
-      // debug (' - map value ', j, map[j][0], map[j][1])
+      debug(' - map value ', j, map[j][0], map[j][1])
       if (!this.push(map[j][0])) {
         return false
       }
@@ -398,17 +399,17 @@ class Encoder {
    */
   pushAny (obj) {
     
-    // debug ('pushObject', obj, this._kept, this._pleaseKeep)
+    debug('pushObject', obj, this._kept, this._pleaseKeep)
     let i
     if (-1 !== (i = this._kept.indexOf(obj))) {
-      // debug ('* ref back to', i)
+      debug('* ref back to', i)
       this._pushTag(29)
       this._pushInt(i)
       return true
     }
     if (-1 !== (i = this._pleaseKeep.indexOf(obj))) {
       const at = this._kept.push(obj) - 1
-      // debug ('* establishing refback #', i)
+      debug('* establishing refback #', i)
       this._pleaseKeep.splice(i, 1)
       this._pushTag(28)
       // keep going, and actually serialize the value, below
@@ -416,25 +417,29 @@ class Encoder {
 
     {
       const sym = this._cycleSymbol
-      if (sym) {
+      if (sym &&
+          obj !== null &&
+          (typeof obj === 'object' || typeof obj === 'function')) {
         if (this._onCycle) {
           if (obj[sym]) {
             // report this cycle and return, avoiding a voyage into eternity
             this._onCycle(obj)
             return true
           }
-          // debug ('adding symbol to', obj)
+          debug('adding symbol to', obj)
           obj[sym] = true
         } else {
-          // debug ('deleting symbol from ', obj)
+          debug('deleting symbol from ', obj)
           delete obj[sym]
         }
       }
     }
 
     this.depth++
+    debug('++depth =', this.depth)
     if (this.depth > this.maxDepth) {
-      throw Error('recursion too deep; consider "sharing" or "maxDepth"')
+      throw Error('recursion too deep (' + this.depth +
+                  '); consider "sharing" or "maxDepth"')
     }
       
     const val = (() => {  // catch the return, for depth counting
@@ -478,7 +483,8 @@ class Encoder {
         throw new Error('Unknown type: ' + typeof obj + ', ' + (obj ? obj.toString() : ''))
       }
     })()
-    this._depth--
+    this.depth--
+    debug('--depth =', this.depth)
     return val
   }
 
@@ -569,7 +575,6 @@ class Encoder {
    *
    */
   static encodeAllWithSharing (objs, options) {
-    const debug = debugr('encode sharing')
     const opt = {}
 
     // remove the sharing:true that landed us here, or we'll
@@ -580,27 +585,27 @@ class Encoder {
     const shared = []
     opt.cycleSymbol = Symbol('cycle marker')
     opt.onCycle = x => {
-      // debug ('shared object detected:', x)  // strings, etc?
+      debug('shared object detected:', x)  // strings, etc?
       if (shared.indexOf(x) === -1) {
-        // debug ('... sharing number', shared.length)
+        debug('... stored at index:', shared.length)
         shared.push(x)
       } else {
-        // debug ('...already had it')
+        debug('...already had it')
       }
     }
 
-    // debug ('\n\nfirst pass, looking for sharing')
+    debug('\n\nfirst pass, looking for sharing')
     Encoder.encodeAll(objs, opt)
 
+    delete opt.onCycle  // which means it'll delete the cycleSymbol
     if (shared.length === 0) {
-      // debug ('no sharing, could return now, if we dont mind leaving symbols')
+      debug('no sharing, could return now, if we dont mind leaving symbols')
     } else {
-      // debug ('shared objects:', shared)
+      debug('shared objects:', shared)
       opt.pleaseKeep = shared
-      delete opt.onCycle  // which means it'll delete the cycleSymbol
     }
 
-    // debug ('\n\nsecond pass, pleaseKeep', opt.pleaseKeep)
+    debug('\n\nsecond pass, pleaseKeep', opt.pleaseKeep)
     return Encoder.encodeAll(objs, opt)
   }
   
@@ -621,7 +626,7 @@ class Encoder {
       delete opt.cycles
       return Encoder.encodeAllWithSharing(objs, opt)
     }
-    // debug ('encodeAll...')
+    debug('encodeAll...')
     const enc = new Encoder(options)
     for (const o of objs) {
       enc.pushAny(o)
