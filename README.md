@@ -32,7 +32,7 @@ Hard to know a good maxDepth.   For the current test suite, maxDepth 10 covers a
 
 ## Tests
 
-For now my tests use ava like (node-cbor)[https://github.com/hildjj/node-cbor] because that's where I first started this project.
+For now my tests use ava like [node-cbor](https://github.com/hildjj/node-cbor) because that's where I first started this project.
 
 ## License
 
