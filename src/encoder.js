@@ -25,6 +25,16 @@ const BUF_NAN = new Buffer('f97e00', 'hex')
 const BUF_INF_NEG = new Buffer('f9fc00', 'hex')
 const BUF_INF_POS = new Buffer('f97c00', 'hex')
 
+/* We always color the objects using the same Symbol property, so that
+ * we probably don't have to clean up after ourselves.  An earlier
+ * version used a different boolean Symbol property for each run, but
+ * the second pass to clean those up was pretty expensive, and in the
+ * normal case, leaving a single extra property is harmless.  We might
+ * just call it _borc_color to make it less confusing in debugging,
+ * but then we'd have to skip it during encoding.  Of course we could
+ * also just use a weakset. */
+const COLOR = Symbol('shared object flag')
+
 function toType (obj) {
   // [object Type]
   // --------8---1
@@ -49,9 +59,20 @@ class Encoder {
     this._kept = options.kept || []
     this._pleaseKeep = options.pleaseKeep || []
 
-    // add if onCycle, removed if not
-    this._cycleSymbol = options.cycleSymbol
-    this._onCycle = options.onCycle
+    if (options.onCycle) {
+      debug('onCycle provided; doing path checking')
+      this._onCycle = options.onCycle
+      this._path = []
+      // turn coloring on, since we need it as a cheap first cut
+      // (options.onShared may overwrite this, which is fine)
+      this._onShared = () => true
+      this._currentColor = Symbol()
+    }
+
+    if (options.onShared) {
+      this._onShared = options.onShared
+      this._currentColor = Symbol()
+    }
 
     this.depth = 0
     this.maxDepth = options.maxDepth || 20
@@ -421,26 +442,29 @@ class Encoder {
       // keep going, and actually serialize the value, below
     }
 
-    {
-      const sym = this._cycleSymbol
-      if (sym &&
-          obj !== null &&
-          (typeof obj === 'object' || typeof obj === 'function')) {
+    if (this._onCycle &&
+        obj !== null &&
+        (typeof obj === 'object' || typeof obj === 'function')) {
+      if (obj[COLOR] === this._currentColor) {
+        let abort = false
+        if (!this._onShared(obj)) abort = true
         if (this._onCycle) {
-          if (obj[sym]) {
-            // report this cycle and return, avoiding a voyage into eternity
+          debug('path check')
+          if (this._path.indexOf(obj) > -1) {
             this._onCycle(obj)
-            return true
+            abort = true
           }
-          debug('adding symbol to', obj)
-          obj[sym] = true
-        } else {
-          debug('deleting symbol from ', obj)
-          delete obj[sym]
         }
+        if (abort) return true
       }
+      obj[COLOR] = this._currentColor
     }
 
+    if (this._path && typeof obj === 'object') {
+      this._path.push(obj)
+      debug('path pushed, now', this._path)
+    }
+    
     this.depth++
     debug('++depth =', this.depth)
     if (this.depth > this.maxDepth) {
@@ -489,6 +513,10 @@ class Encoder {
         throw new Error('Unknown type: ' + typeof obj + ', ' + (obj ? obj.toString() : ''))
       }
     })()
+    if (this._path && typeof obj === 'object') {
+      this._path.pop()
+      debug('path pop, now', this._path)
+    }
     this.depth--
     debug('--depth =', this.depth)
     return val
@@ -565,8 +593,8 @@ class Encoder {
    * @param {*} o
    * @returns {Buffer}
    */
-  static encode (o) {
-    const enc = new Encoder()
+  static encode (o, options) {
+    const enc = new Encoder(options)
     enc.pushAny(o)
 
     return enc.finalize()
@@ -586,12 +614,20 @@ class Encoder {
     // remove the sharing:true that landed us here, or we'll
     // be looping back again when we call encodeAll
     Object.assign(opt, options || {})
-    delete opt.detectShared
 
     const shared = []
-    opt.cycleSymbol = Symbol('cycle marker')
-    opt.onCycle = x => {
+    opt.onShared = x => {
       debug('shared object detected:', x)  // strings, etc?
+      if (shared.indexOf(x) === -1) {
+        debug('... stored at index:', shared.length)
+        shared.push(x)
+      } else {
+        debug('...already had it')
+      }
+      return false // no need to go in, since we've already looked there
+    }
+    opt.onCycle = x => {
+      debug('cycle object detected:', x)  // strings, etc?
       if (shared.indexOf(x) === -1) {
         debug('... stored at index:', shared.length)
         shared.push(x)
@@ -601,15 +637,19 @@ class Encoder {
     }
 
     debug('\n\nfirst pass, looking for sharing')
-    Encoder.encodeAll(objs, opt)
+    const bytes = Encoder.encodeAll(objs, opt)
 
-    delete opt.onCycle  // which means it'll delete the cycleSymbol
     if (shared.length === 0) {
-      debug('no sharing, could return now, if we dont mind leaving symbols')
-    } else {
-      debug('shared objects:', shared)
-      opt.pleaseKeep = shared
+      // could go through an delete COLOR if we really want, but that's
+      // slow
+      return bytes
     }
+    
+    debug('shared objects:', shared)
+
+    opt.pleaseKeep = shared
+    delete opt.onCycle   // no need for cycle detection this time
+    delete opt.onShared  // or this, since we've marked them already
 
     debug('\n\nsecond pass, pleaseKeep', opt.pleaseKeep)
     return Encoder.encodeAll(objs, opt)

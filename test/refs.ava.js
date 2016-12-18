@@ -3,6 +3,18 @@
 const cbor = require('../')
 const test = require('ava')
 
+function roundtrip (t, obj) {
+  //console.log('roundtrip', obj)
+  const bytes = cbor.encodeAll(obj, {sharing: true, canonical: true})
+  //console.log('encoded as', bytes.toString('hex'))
+  const out = cbor.decodeAllSync(bytes)
+  t.deepEqual(out, obj)
+  //console.log('decoded', out)
+  t.is(cbor.encodeAll(out, {sharing: true, canonical: true}).toString('hex'),
+       bytes.toString('hex'))
+}
+
+
 test('keep', t => {
   const a = []
   const b = []
@@ -16,6 +28,8 @@ test('keep', t => {
        'd81d01' +  // 29(1)    and the second
        'd81d00'    // 29(0)    and the first again
       )
+
+  roundtrip(t, [a,b,a,b,a])
 })
 
 test('unkeep', t => {
@@ -40,9 +54,34 @@ test('unkeep', t => {
   t.not(out[0], out[1])
 })
 
+test('detect cycle', t => {
+  t.plan(1)
+  const a = []
+  a.push(a)
+
+  const bytes = cbor.encode(a, { onCycle: (x) => {
+    t.is(a,x)
+  }})
+})
+
+test('detect shared', t => {
+  t.plan(1)
+  const b = []
+  const a = [b,b]
+
+  const bytes = cbor.encode(a, {
+    onCycle: (x) => {
+      t.fail()
+    },
+    onShared: (x) => {
+      t.is(x, b)
+    }
+  })
+})
+     
 test('cycle a=[a]', t => {
   const a = []
-  a.push(a) // make this a cyclical structure
+  a.push(a)
 
   const bytes = cbor.encodeAll([a], {cycles: true})
   t.not(bytes, null)
@@ -52,7 +91,7 @@ test('cycle a=[a]', t => {
 
   const out = cbor.decodeAllSync(bytes)
   
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 test('cycle a=[[[a]]]', t => {
@@ -63,7 +102,7 @@ test('cycle a=[[[a]]]', t => {
   t.is(bytes.toString('hex'),
        'd81c81818181d81d00' // 28([[[[29(0)]]]])
       )
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 test('a=[a,a]', t => {
@@ -75,7 +114,7 @@ test('a=[a,a]', t => {
        'd81c82d81d00d81d00' // 28([29(0), 29(0)])
       )
 
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 test('two cycles', t => {
@@ -89,7 +128,7 @@ test('two cycles', t => {
   t.is(bytes.toString('hex'),
        '82d81ca16161d81d00d81ca16162d81d01'// [28({"a": 29(0)}), 28({"b": 29(1)})]
       )
-  loopcheck(t, [c])
+  roundtrip(t, [c])
 })
 
 /* 
@@ -137,16 +176,6 @@ test.skip('resolve with evil nested', t => {
 })
 
 */ 
-function loopcheck (t, obj) {
-  //console.log('loopcheck', obj)
-  const bytes = cbor.encodeAll(obj, {sharing: true, canonical: true})
-  //console.log('encoded as', bytes.toString('hex'))
-  const out = cbor.decodeAllSync(bytes)
-  //console.log('decoded', out)
-  t.is(cbor.encodeAll(out, {sharing: true, canonical: true}).toString('hex'),
-       bytes.toString('hex'))
-}
-
 
 test('tangle 2a', t => {
   const a = []
@@ -168,7 +197,7 @@ test('tangle 2a', t => {
        'd81c82d81d00d81c82d81d00d81d01' // 28([29(0), 28([29(0), 29(1)])])
       )
 
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 test('tangle 2b', t => {
@@ -183,7 +212,7 @@ test('tangle 2b', t => {
        'a16161d81ca16162d81d00' // {"a": 28({"b": 29(0)})}
       )
 
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 
@@ -203,7 +232,7 @@ test('tangle 2c', t => {
   const bytes = cbor.encodeAll([a], {sharing:true})
 
   t.is(cbor.diagnose(bytes), '28([28({"a": 29(0), "b": 29(1)})])')
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
 
@@ -223,6 +252,6 @@ test('tangle 4', t => {
   c.c = c
   c.d = d
   
-  loopcheck(t, [a])
+  roundtrip(t, [a])
 })
 
