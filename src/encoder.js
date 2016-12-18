@@ -1,5 +1,6 @@
 'use strict'
 
+const debugr = require('debug')
 const url = require('url')
 const Bignumber = require('bignumber.js')
 
@@ -43,6 +44,16 @@ class Encoder {
 
     this.streaming = typeof options.stream === 'function'
     this.onData = options.stream
+
+    this._kept = options.kept || []
+    this._pleaseKeep = options.pleaseKeep || []
+
+    // add if onCycle, removed if not
+    this._cycleSymbol = options.cycleSymbol
+    this._onCycle = options.onCycle
+
+    this.depth = 0
+    this.maxDepth = options.maxDepth || 10
 
     this.semanticTypes = [
       [url.Url, this._pushUrl],
@@ -356,6 +367,7 @@ class Encoder {
     }).sort(utils.keySorter)
 
     for (var j = 0; j < len; j++) {
+      // debug (' - map value ', j, map[j][0], map[j][1])
       if (!this.push(map[j][0])) {
         return false
       }
@@ -385,9 +397,49 @@ class Encoder {
    * @returns {boolean} true on success
    */
   pushAny (obj) {
-    var typ = toType(obj)
+    
+    // debug ('pushObject', obj, this._kept, this._pleaseKeep)
+    let i
+    if (-1 !== (i = this._kept.indexOf(obj))) {
+      // debug ('* ref back to', i)
+      this._pushTag(29)
+      this._pushInt(i)
+      return true
+    }
+    if (-1 !== (i = this._pleaseKeep.indexOf(obj))) {
+      const at = this._kept.push(obj) - 1
+      // debug ('* establishing refback #', i)
+      this._pleaseKeep.splice(i, 1)
+      this._pushTag(28)
+      // keep going, and actually serialize the value, below
+    }
 
-    switch (typ) {
+    {
+      const sym = this._cycleSymbol
+      if (sym) {
+        if (this._onCycle) {
+          if (obj[sym]) {
+            // report this cycle and return, avoiding a voyage into eternity
+            this._onCycle(obj)
+            return true
+          }
+          // debug ('adding symbol to', obj)
+          obj[sym] = true
+        } else {
+          // debug ('deleting symbol from ', obj)
+          delete obj[sym]
+        }
+      }
+    }
+
+    this.depth++
+    if (this.depth > this.maxDepth) {
+      throw Error('recursion too deep; consider "sharing" or "maxDepth"')
+    }
+      
+    const val = (() => {  // catch the return, for depth counting
+      var typ = toType(obj)
+      switch (typ) {
       case 'Number':
         return this._pushNumber(obj)
       case 'String':
@@ -414,17 +466,20 @@ class Encoder {
         return this._pushRegexp(this, obj)
       case 'Symbol':
         switch (obj) {
-          case SYMS.NULL:
-            return this._pushObject(null)
-          case SYMS.UNDEFINED:
-            return this._pushUndefined(void 0)
+        case SYMS.NULL:
+          return this._pushObject(null)
+        case SYMS.UNDEFINED:
+          return this._pushUndefined(void 0)
           // TODO: Add pluggable support for other symbols
-          default:
-            throw new Error('Unknown symbol: ' + obj.toString())
+        default:
+          throw new Error('Unknown symbol: ' + obj.toString())
         }
       default:
         throw new Error('Unknown type: ' + typeof obj + ', ' + (obj ? obj.toString() : ''))
-    }
+      }
+    })()
+    this._depth--
+    return val
   }
 
   finalize () {
@@ -504,6 +559,80 @@ class Encoder {
 
     return enc.finalize()
   }
+
+  /**
+   * Like encodeAll, but also works for objects with cycles, using keep()
+   *
+   * Access as encodeAll with options {cycles: true}
+   *
+   * encodeCyclic?
+   *
+   */
+  static encodeAllWithSharing (objs, options) {
+    const debug = debugr('encode sharing')
+    const opt = {}
+
+    // remove the sharing:true that landed us here, or we'll
+    // be looping back again when we call encodeAll
+    Object.assign(opt, options || {})
+    delete opt.detectShared
+
+    const shared = []
+    opt.cycleSymbol = Symbol('cycle marker')
+    opt.onCycle = x => {
+      // debug ('shared object detected:', x)  // strings, etc?
+      if (shared.indexOf(x) === -1) {
+        // debug ('... sharing number', shared.length)
+        shared.push(x)
+      } else {
+        // debug ('...already had it')
+      }
+    }
+
+    // debug ('\n\nfirst pass, looking for sharing')
+    Encoder.encodeAll(objs, opt)
+
+    if (shared.length === 0) {
+      // debug ('no sharing, could return now, if we dont mind leaving symbols')
+    } else {
+      // debug ('shared objects:', shared)
+      opt.pleaseKeep = shared
+      delete opt.onCycle  // which means it'll delete the cycleSymbol
+    }
+
+    // debug ('\n\nsecond pass, pleaseKeep', opt.pleaseKeep)
+    return Encoder.encodeAll(objs, opt)
+  }
+  
+  /**
+   * Encode zero or more JavaScript objects, provided in an array, and
+   * return a Buffer containing the CBOR bytes.  Unlike encode(), this
+   * allows passing options to the encoder.
+   *
+   * @param {...any} objs - the objects to encode
+   * @returns {Buffer} - the encoded objects
+   */
+  static encodeAll (objs, options) {
+    if (options && (options.sharing || options.cycles)) {
+      const opt = {}
+      Object.assign(opt, options)
+      // because we might recurse back
+      delete opt.sharing
+      delete opt.cycles
+      return Encoder.encodeAllWithSharing(objs, opt)
+    }
+    // debug ('encodeAll...')
+    const enc = new Encoder(options)
+    for (const o of objs) {
+      enc.pushAny(o)
+    }
+    return enc.finalize()
+  }
+
 }
 
 module.exports = Encoder
+
+
+
+

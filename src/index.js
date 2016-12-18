@@ -9,10 +9,13 @@ exports.Tagged = require('./tagged')
 
 // exports.comment = exports.Commented.comment
 exports.decodeAll = exports.Decoder.decodeAll
+exports.decodeAllSync = exports.Decoder.decodeAll
 exports.decodeFirst = exports.Decoder.decodeFirst
 exports.diagnose = exports.Diagnose.diagnose
 exports.encode = exports.Encoder.encode
+exports.encodeAll = exports.Encoder.encodeAll
 exports.decode = exports.Decoder.decode
+
 
 exports.leveldb = {
   decode: exports.Decoder.decodeAll,
