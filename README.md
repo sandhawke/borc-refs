@@ -1,6 +1,6 @@
 # borc-refs
 
-A fork of [borc](https://github.com/dignifiedquire/borc) which is itself a fork of [node-cbor][https://github.com/hildjj/node-cbor).  Adds support for detecting, transmitting, and reconstructing shared values (including cycles and lattices), using [the cbor value-sharing extension](http://cbor.schmorp.de/value-sharing), which uses semantic tags 28 and 29.
+A fork of [borc](https://github.com/dignifiedquire/borc) which is itself a fork of [node-cbor](https://github.com/hildjj/node-cbor).  Adds support for detecting, transmitting, and reconstructing shared values (including cycles and lattices), using [the cbor value-sharing extension](http://cbor.schmorp.de/value-sharing), which uses semantic tags 28 and 29.
 
 Additions in this fork:
 
