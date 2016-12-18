@@ -1,86 +1,24 @@
-# borc
+# borc-refs
 
-[![](https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square)](http://ipn.io)
-[![](https://img.shields.io/badge/project-IPFS-blue.svg?style=flat-square)](http://ipfs.io/)
-[![](https://img.shields.io/badge/freenode-%23ipfs-blue.svg?style=flat-square)](http://webchat.freenode.net/?channels=%23ipfs)
-[![Coverage Status](https://coveralls.io/repos/github/dignifiedquire/borc/badge.svg?branch=master)](https://coveralls.io/github/dignifiedquire/borc?branch=master)
-[![Dependency Status](https://david-dm.org/dignifiedquire/borc.svg?style=flat-square)](https://david-dm.org/dignifiedquire/borc)
-[![Travis CI](https://travis-ci.org/dignifiedquire/borc.svg?branch=master)](https://travis-ci.org/dignifiedquire/borc)
-[![Circle CI](https://circleci.com/gh/dignifiedquire/borc.svg?style=svg)](https://circleci.com/gh/dignifiedquire/borc)
+A fork of [borc](https://github.com/dignifiedquire/borc) which is itself a fork of (node-cbor)[https://github.com/hildjj/node-cbor].  Adds support for detecting, transmitting, and reconstructing shared values (including cycles and lattices), using [the cbor value-sharing extension](http://cbor.schmorp.de/value-sharing), which uses semantic tags 28 and 29.
 
+Additions in this fork
 
-> Assimilate all your JavaScript objects into the Concise Binary Object Representation (CBOR) data format ([RFC7049](http://tools.ietf.org/html/rfc7049)) **as fast as possible**.
+1.  The decoder handles tags 28 and 29, re-constructing any shared values.  This doesn't cost anything, so it's always on.
 
+2.  Added encodeAll, to give a convenient way to give options to the encoder, and take a special option (below).
 
-## About
+3.  Added the Encoder option pleaseKeep.  Value is an array of objects that you want to be sent as shared values.
 
-This library is a fork of the awesome [node-cbor](https://github.com/hildjj/node-cbor). It borrows a lot of the interface, but drops all streaming and async processing in favor of a minimal syn api and being as fast as possible.
+4.  Added the option "sharing" for encodeAll.  When true, the encoder detects all shared objects (by attaching a Symbol) doing a discarded run of encodeAll.  It then runs encodeAll again with pleaseKeep set to all the shared objects it found (and to remove the Symbol).
 
+5.  Added depth checking, with an encoder maxDepth option.   If structures are too deep, an error is thrown saying to set a higher maxDepth or possibly turn on sharing.  Without this, when you hit a circular structure (without having set sharing true), you get a stack overflow which is hard to diagnose.
 
-## Installation
+6.  Added a "kept" option to both Encoder and Decoder, allowing the caller to specify the array to use for remembering shared values.   kept[n] is the nth shared value.
 
-```bash
-$ npm install --save borc
-```
+## Tests
 
-## Benchmarks
-
-TODO
-
-## Example
-
-```javascript
-const cbor = require('borc')
-const assert = require('assert')
-
-const encoded = cbor.encode(true) // returns <Buffer f5>
-const decoded = cbor.decodeFirst(encoded)
-// decoded is the unpacked object
-assert.ok(obj === true)
-
-// Use integers as keys
-var m = new Map()
-m.set(1, 2)
-encoded = cbor.encode(m) // <Buffer a1 01 02>
-```
-
-## API
-
-See https://dignifiedquire.github.io/borc for details
-
-The sync encoding and decoding are exported as a
-[leveldb encoding](https://github.com/Level/levelup#custom_encodings), as
-`cbor.leveldb`.
-
-## Supported types
-
-The following types are supported for encoding:
-
-* boolean
-* number (including -0, NaN, and ±Infinity)
-* string
-* Array, Set (encoded as Array)
-* Object (including null), Map
-* undefined
-* Buffer
-* Date,
-* RegExp
-* url.URL
-* [bignumber](https://github.com/MikeMcl/bignumber.js)
-
-Decoding supports the above types, including the following CBOR tag numbers:
-
-| Tag | Generated Type |
-|-----|----------------|
-| 0   | Date           |
-| 1   | Date           |
-| 2   | bignumber      |
-| 3   | bignumber      |
-| 4   | bignumber      |
-| 5   | bignumber      |
-| 32  | url.URL        |
-| 35  | RegExp         |
-
+For now my tests use ava like (node-cbor)[https://github.com/hildjj/node-cbor] because that's where I first started this project.
 
 ## License
 
