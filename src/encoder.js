@@ -53,7 +53,7 @@ class Encoder {
     this._onCycle = options.onCycle
 
     this.depth = 0
-    this.maxDepth = options.maxDepth || 10
+    this.maxDepth = options.maxDepth || 50
 
     this.semanticTypes = [
       [url.Url, this._pushUrl],
