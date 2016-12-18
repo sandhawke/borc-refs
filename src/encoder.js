@@ -91,6 +91,12 @@ class Encoder {
     if (!val) {
       return true
     }
+    /*   no measurable performance increase
+    if (this._onCycle) {
+      // during cycle-checking, we can stop here
+      return true
+    }
+    */
 
     this.result[this.offset] = val
     this.resultMethod[this.offset] = 0
