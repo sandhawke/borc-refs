@@ -12,7 +12,7 @@ exports.decodeAll = exports.Decoder.decodeAll
 exports.decodeAllSync = exports.Decoder.decodeAll
 exports.decodeFirst = exports.Decoder.decodeFirst
 exports.diagnose = exports.Diagnose.diagnose
-exports.encode = exports.Encoder.encode
+exports.encode = exports.Encoder.encodeAllWithSharing
 exports.encodeAll = exports.Encoder.encodeAll
 exports.decode = exports.Decoder.decode
 

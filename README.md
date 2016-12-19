@@ -1,6 +1,38 @@
-# borc-refs
+Fast (de)serialization of JavaScript objects in a graph (including cycles!) using CBOR with the shared-value extension.
 
-A fork of [borc](https://github.com/dignifiedquire/borc) which is itself a fork of [node-cbor](https://github.com/hildjj/node-cbor).  Adds support for detecting, transmitting, and reconstructing shared values (including cycles and lattices), using [the cbor value-sharing extension](http://cbor.schmorp.de/value-sharing) (semantic tags 28 and 29).
+```js
+'use strict'
+const cbor = require('cbor-graph')
+let bytes
+{
+  const alice = { friends: [] }
+  const bob = { friends: [] }
+  alice.friends.push(bob)
+  bob.friends.push(alice)
+  alice.self = alice // even simpler demo
+  const people = [ alice, bob ]
+
+  bytes = cbor.encode([people])  // It works!  No infinite loop!
+  console.log(cbor.diagnose(bytes))
+  // => [28({"self": 29(0), "friends": [28({"friends": [29(0)]})]}), 29(1)]
+}
+
+{
+  const people = cbor.decode(bytes)
+  console.log('decoded:', people)
+  // => decoded: [ { self: [Circular], friends: [ [Object] ] },
+  //               { friends: [ [Object] ] } ]
+  const [alice, bob] = people
+  console.log(alice.friends.indexOf(bob) > -1 ? 'friend found!':false)
+  // => friend found!
+  console.log(bob.friends.indexOf(alice) > -1 ? 'friend found!':false)
+  // => friend found!
+}
+``
+
+## Details
+
+This is fork of [borc](https://github.com/dignifiedquire/borc) which is itself a fork of [node-cbor](https://github.com/hildjj/node-cbor).  Adds support for detecting, transmitting, and reconstructing shared values (including cycles and lattices), using [the cbor value-sharing extension](http://cbor.schmorp.de/value-sharing) (semantic tags 28 and 29).
 
 This isn't a github fork because I already had a fork of [node-cbor](https://github.com/hildjj/node-cbor) and github wont allow that, as far as I can tell.
 
@@ -22,15 +54,19 @@ Additions in this fork:
 
 ## Issues
 
+Move these issues to github issues?
+
 Maybe sharing should be a flag on Decoder, too?
 
-Maybe sharing should default to on?
+Maybe sharing should default to on? (as in the example above)
 
 Right now, sharing is an option to Encoder.shareAll, not to Encoder.  That'd be nice to fix.
 
 Lots of corner cases haven't been tested
 
 Maybe provide a way to share long strings as well?  That would require the 'coloring' be done using a WeakSet instead of a Symbol property.   That would remove the need for cleanup, but probably be slower.  Try it out?
+
+What to call it?  cbor-graph seems good, unless it's included into cbor or borc.
 
 ## Tests
 
