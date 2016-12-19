@@ -3,6 +3,7 @@ Fast (de)serialization of JavaScript objects in a graph (including cycles!) usin
 ```js
 'use strict'
 const cbor = require('cbor-graph')
+
 let bytes
 {
   const alice = { friends: [] }
@@ -28,7 +29,7 @@ let bytes
   console.log(bob.friends.indexOf(alice) > -1 ? 'friend found!':false)
   // => friend found!
 }
-``
+```
 
 ## Details
 
