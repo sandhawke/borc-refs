@@ -12,7 +12,7 @@ let bytes
   alice.self = alice // even simpler demo
   const people = [ alice, bob ]
 
-  bytes = cbor.encode([people])  // It works!  No infinite loop!
+  bytes = cbor.encode(people)  // It works!  No infinite loop!
   console.log(cbor.diagnose(bytes))
   // => [28({"self": 29(0), "friends": [28({"friends": [29(0)]})]}), 29(1)]
 }
