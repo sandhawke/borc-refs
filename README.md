@@ -12,7 +12,9 @@ Additions in this fork:
 
 3.  Added the Encoder option pleaseKeep.  Value is an array of objects (in any order) that you want to be sent as shared values (whenever they are next encountereed in the Encoding process).
 
-4.  Added the boolean option "sharing" for encodeAll.  Makes structure sharing, including cycles, just work (in theory).  There is a performance cost, so it's not always on.   Implemented as: the encoder detects all shared objects (by attaching a Symbol) while doing a discarded run of encodeAll.  It then runs encodeAll again with pleaseKeep set to any shared objects it found (and to remove the Symbol).  
+4.  Added Encoder options for callbacks when shared structures (onShared) or cyclical structures (onCycle) are detected.   When these options are set, detection is enabled.  Preliminary benchmarks show performances cost is about 15%.  Currently implemented by adding a Symbol property, which is left behind, hopefully causing no problems.   We cleaning it up would take a second pass, but maybe we could provide that as an option.
+
+5.  Added a boolean option "sharing" for encodeAll, which uses onShared and onCycle.  If any sharing or cycles are found during encoding, a second encoding pass is made, with all the shared objects added to pleaseKeep, so that sharing is done.
 
 5.  Added depth checking, with an encoder maxDepth option.   If structures are too deep, an error is thrown saying to set a higher maxDepth or possibly turn on sharing.  Without this, when you hit a circular structure (without having set sharing true), you get a vast stack overflow which is hard to diagnose.  Defaults to 20, which is enough for the test suite.
 
@@ -27,6 +29,8 @@ Maybe sharing should default to on?
 Right now, sharing is an option to Encoder.shareAll, not to Encoder.  That'd be nice to fix.
 
 Lots of corner cases haven't been tested
+
+Maybe provide a way to share long strings as well?  That would require the 'coloring' be done using a WeakSet instead of a Symbol property.   That would remove the need for cleanup, but probably be slower.  Try it out?
 
 ## Tests
 
